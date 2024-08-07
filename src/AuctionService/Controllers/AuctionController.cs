@@ -2,6 +2,7 @@ using AuctionService.Data;
 using AuctionService.DTOs;
 using AuctionService.Entities;
 using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,13 +22,21 @@ public class AuctionController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<AuctionDto>>> GetAllAuctions()
+    public async Task<ActionResult<List<AuctionDto>>> GetAllAuctions(string date)
     {
-        var auctions = await _dbContext.Actions
-            .Include(x => x.Item)
-            .OrderBy(x => x.Item.Make)
-            .ToListAsync();
-        return _mapper.Map<List<AuctionDto>>(auctions);
+        var quary = _dbContext.Actions.OrderBy(x => x.Item.Make).AsQueryable();
+
+        if (!string.IsNullOrEmpty(date))
+        {
+            quary = quary.Where(x => x.UpdatedAt.CompareTo(DateTime.Parse(date).ToUniversalTime()) > 0);
+        }
+        // var auctions = await _dbContext.Actions
+        //     .Include(x => x.Item)
+        //     .OrderBy(x => x.Item.Make)
+        //     .ToListAsync();
+        // return _mapper.Map<List<AuctionDto>>(auctions);
+
+        return await quary.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
     }
 
     [HttpGet("{id}")]
@@ -58,16 +67,16 @@ public class AuctionController : ControllerBase
         {
             return CreatedAtAction(
                 nameof(GetSingleAction),
-                new { auction.Id }, 
+                new { auction.Id },
                 _mapper.Map<AuctionDto>(auction)
             );
         }
     }
 
-    [HttpPut]
-    public async Task<ActionResult> UpdateAuction(UpdateAuctionDto auctionDto)
+    [HttpPut("{id}")]
+    public async Task<ActionResult> UpdateAuction(Guid id, UpdateAuctionDto auctionDto)
     {
-        var auction = await _dbContext.Actions.Include(x => x.Item).FirstOrDefaultAsync();
+        var auction = await _dbContext.Actions.Include(x => x.Item).FirstOrDefaultAsync(x => x.Id == id);
         if (auction == null) return NotFound();
 
         auction.Item.Make = auctionDto.Make ?? auction.Item.Make;
@@ -85,10 +94,10 @@ public class AuctionController : ControllerBase
         return BadRequest("Update went wrong...");
     }
 
-    [HttpDelete]
+    [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteAuction(Guid id)
     {
-        var auction = await _dbContext.Actions.Include(x => x.Item).FirstOrDefaultAsync();
+        var auction = await _dbContext.Actions.Include(x => x.Item).FirstOrDefaultAsync(x => x.Id == id);
         if (auction == null) return NotFound();
 
         _dbContext.Actions.Remove(auction);
@@ -97,7 +106,7 @@ public class AuctionController : ControllerBase
         {
             return Ok();
         }
-        return BadRequest("Problem with Delete...");
 
+        return BadRequest("Problem with Delete...");
     }
 }
